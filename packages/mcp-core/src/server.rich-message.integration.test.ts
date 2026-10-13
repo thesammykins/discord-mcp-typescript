@@ -259,10 +259,21 @@ describe('rich message read protocol', () => {
     messages.push({ ...baseMessage, ...legacy, id: OLDER_ID });
     const result = await client.callTool({
       name: 'messages_read',
-      arguments: { channel_id: CHANNEL_ID, limit: 2, [cursor]: MESSAGE_ID },
+      arguments: {
+        channel_id: CHANNEL_ID,
+        limit: 2,
+        [cursor]: String(
+          BigInt(cursor === 'before' ? MESSAGE_ID : OLDER_ID) + (cursor === 'before' ? 1n : -1n),
+        ),
+      },
     });
     expect(result.isError).toBe(false);
-    expect(query).toEqual({ limit: '2', [cursor]: MESSAGE_ID });
+    expect(query).toEqual({
+      limit: '2',
+      [cursor]: String(
+        BigInt(cursor === 'before' ? MESSAGE_ID : OLDER_ID) + (cursor === 'before' ? 1n : -1n),
+      ),
+    });
     expect(result.structuredContent).toMatchObject({
       messages: [
         { id: MESSAGE_ID, ...card },

@@ -148,7 +148,10 @@ describe('MCP protocol contract', () => {
         HttpResponse.json({ threads: [post] }),
       ),
       http.get(`${api}/channels/${forumId}/threads/archived/public`, () =>
-        HttpResponse.json({ threads: [post], has_more: false }),
+        HttpResponse.json({
+          threads: [{ ...post, thread_metadata: { archive_timestamp: '2026-01-01T00:00:00Z' } }],
+          has_more: false,
+        }),
       ),
     );
     for (const channel_id of [forumId, postId]) {

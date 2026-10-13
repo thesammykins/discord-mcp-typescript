@@ -1,8 +1,13 @@
+import { DiscordAPIError, HTTPError, RateLimitError } from '@discordjs/rest';
 import { container } from '@sapphire/pieces';
+import { TaskCancelledError } from 'cockatiel';
 import { Routes } from 'discord-api-types/v10';
 import { z } from 'zod';
+import { MessageOutcomeUnknown } from '../../errors/client.js';
+import { classifyDiscordError } from '../../rest/errors.js';
 import { defineTool } from '../_lib/defineTool.js';
 import { messageJumpUrl } from '../_lib/message-jump-url.js';
+import { validatePage } from '../_lib/page.js';
 import { dualResult } from '../_lib/response.js';
 import { ChannelId, MessageId } from '../_lib/snowflake.js';
 
@@ -40,6 +45,9 @@ export default defineTool({
       .max(2000, 'content max 2000 chars')
       .describe('Message text content (max 2000 chars).'),
     tts: z.boolean().optional().describe('Text-to-speech, default false'),
+    reply_to_message_id: MessageId.optional().describe(
+      'Same-channel reply target; fails if missing',
+    ),
   },
   outputSchema: {
     message_id: MessageId,
@@ -54,9 +62,53 @@ export default defineTool({
     openWorldHint: true,
   },
   handler: async (args) => {
-    const msg = (await container.rest.post(Routes.channelMessages(args.channel_id), {
-      body: { content: args.content, tts: args.tts ?? false },
-    })) as DiscordMessageResponse;
+    let msg: DiscordMessageResponse;
+    try {
+      msg = (await container.rest.post(Routes.channelMessages(args.channel_id), {
+        body: {
+          content: args.content,
+          tts: args.tts ?? false,
+          allowed_mentions: { parse: [], replied_user: false },
+          ...(args.reply_to_message_id === undefined
+            ? {}
+            : {
+                message_reference: {
+                  message_id: args.reply_to_message_id,
+                  channel_id: args.channel_id,
+                  fail_if_not_exists: true,
+                },
+              }),
+        },
+      })) as DiscordMessageResponse;
+    } catch (error) {
+      if (
+        error instanceof TaskCancelledError ||
+        classifyDiscordError(error, { method: 'post' })?.replaySafe === false ||
+        (!(error instanceof DiscordAPIError) &&
+          !(error instanceof HTTPError) &&
+          !(error instanceof RateLimitError) &&
+          classifyDiscordError(error, { method: 'post' }) === null)
+      )
+        throw new MessageOutcomeUnknown(
+          'Message outcome is unknown; inspect channel history before another send',
+        );
+      throw error;
+    }
+    try {
+      if (
+        msg === null ||
+        typeof msg !== 'object' ||
+        msg.channel_id !== args.channel_id ||
+        typeof msg.timestamp !== 'string' ||
+        !Number.isFinite(Date.parse(msg.timestamp))
+      )
+        throw new Error('Invalid send response');
+      validatePage([msg.id], 1);
+    } catch {
+      throw new MessageOutcomeUnknown(
+        'Discord send response is incomplete or mismatched; reconcile channel history before another send',
+      );
+    }
 
     return dualResult({
       text: `Sent message ${msg.id} to <#${msg.channel_id}>.`,

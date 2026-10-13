@@ -8,6 +8,7 @@ import {
 } from '../errors/client.js';
 import { resolveChannelGuildId } from '../rest/channel-guild-cache.js';
 import type { ToolMiddleware } from './compose.js';
+import { OwnerScopeError, type OwnerScopePolicy } from './owner-scope.js';
 
 interface SchemaCarrier {
   readonly inputSchema: Record<string, z.ZodTypeAny>;
@@ -185,6 +186,7 @@ export class GuildScopePolicy {
     private readonly rest: REST,
     private readonly expectedBotId?: string,
     private readonly allowUserScoped = false,
+    private readonly ownerScope?: OwnerScopePolicy,
   ) {}
 
   public get enabled(): boolean {
@@ -202,6 +204,11 @@ export class GuildScopePolicy {
     argsValue: unknown,
     schema: SchemaCarrier | undefined,
   ): Promise<void> {
+    if (this.ownerScope !== undefined) {
+      const guild = await this.ownerScope.authorize(toolName, argsValue);
+      if (guild !== undefined) this.assertGuild(guild);
+      return;
+    }
     if (USER_SCOPED_TOOLS.has(toolName)) {
       if (this.allowed === null) return;
       if (!this.allowUserScoped || this.expectedBotId === undefined) {
@@ -303,6 +310,8 @@ export class GuildScopePolicy {
   }
 
   public async authorizeSubscription(uri: string): Promise<void> {
+    if (this.ownerScope !== undefined)
+      throw new OwnerScopeError('Resources are disabled in the owner surface');
     if (this.allowed === null) return;
 
     let parsed: URL;

@@ -10,5 +10,8 @@
   },
   "dependencies": {
     "msw": "^2.15.0"
+  },
+  "devDependencies": {
+    "vitest": "4.1.11"
   }
 }

@@ -9,6 +9,7 @@ import {
   createRuntimeAccessResolver,
   FilePayloadApprovalLedger,
   loadConfig,
+  OWNER_WRITE_TOOL_NAMES,
   PayloadApprovalLedger,
   verifyExpectedBotIdentity,
   wrapRestWithResilience,
@@ -20,8 +21,10 @@ import {
   toNodeHandler,
 } from '@modelcontextprotocol/node';
 import { createMcpHandler } from '@modelcontextprotocol/server';
+import type { JWTVerifyGetKey } from 'jose';
 import { recordBlueprintActivity } from '../lib/activity.js';
 import type { OtelHandle } from '../otel.js';
+import { ownerAuth } from './owner-auth.js';
 
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_PORT = 3000;
@@ -32,6 +35,8 @@ export interface StartHttpOptions {
   host?: string;
   port?: number;
   registerSignalHandlers?: boolean;
+  /** Synthetic public-key verifier for tests; production uses configured HTTPS JWKS. */
+  ownerVerifyKey?: JWTVerifyGetKey;
 }
 
 export function hasValidBearerToken(
@@ -123,8 +128,10 @@ function requestDeclaresBody(req: IncomingMessage): boolean {
  */
 export async function startHttp(options: StartHttpOptions = {}): Promise<Server> {
   const config = loadConfig();
+  const owner =
+    config.MCP_OWNER_USER_ID === undefined ? undefined : ownerAuth(config, options.ownerVerifyKey);
   const accessToken = config.DISCORD_MCP_ACCESS_TOKEN;
-  if (accessToken === undefined) {
+  if (owner === undefined && accessToken === undefined) {
     throw new Error('DISCORD_MCP_ACCESS_TOKEN is required for the HTTP transport.');
   }
   const logger = createLogger(config);
@@ -149,7 +156,7 @@ export async function startHttp(options: StartHttpOptions = {}): Promise<Server>
             : { expectedBotId: config.DISCORD_EXPECTED_BOT_ID }),
           // Streamable HTTP is REST-only here; no privileged Gateway intents
           // are active, so intent-requiring calls stay non-admissible.
-          runtimeIntents: { GUILD_MEMBERS: 'missing', MESSAGE_CONTENT: 'missing' },
+          runtimeIntents: { GUILD_MEMBERS: 'missing', MESSAGE_CONTENT: 'unknown' },
         });
   const otel: OtelHandle | null = config.OTEL_ENABLED
     ? (await import('../otel.js')).startOtel(config)
@@ -175,7 +182,10 @@ export async function startHttp(options: StartHttpOptions = {}): Promise<Server>
         })
       : new PayloadApprovalLedger();
   const reportMcpError = (error: Error): void => {
-    logger.error({ err: error }, 'MCP HTTP request failed');
+    logger.error(
+      owner === undefined ? { err: error } : { error_type: error.name },
+      'MCP HTTP request failed',
+    );
   };
   const mcpHandler = createMcpHandler(
     async () =>
@@ -218,20 +228,64 @@ export async function startHttp(options: StartHttpOptions = {}): Promise<Server>
   const server = createServer(async (req, res) => {
     const pathname =
       req.url === undefined ? undefined : new URL(req.url, 'http://localhost').pathname;
+    // Container liveness only. Proxies must not publish this route, and a
+    // non-loopback peer cannot use it even when the server binds all interfaces.
+    if (pathname === '/livez') {
+      const peer = req.socket.remoteAddress;
+      if (
+        !['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(peer ?? '') ||
+        req.method !== 'GET' ||
+        requestDeclaresBody(req)
+      ) {
+        rejectAndClose(req, res, 404);
+        return;
+      }
+      res
+        .writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
+        .end('{"status":"ok"}');
+      return;
+    }
+    if (
+      owner !== undefined &&
+      (pathname === '/.well-known/oauth-protected-resource' ||
+        pathname === '/.well-known/oauth-protected-resource/mcp') &&
+      req.method === 'GET'
+    ) {
+      res
+        .writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
+        .end(JSON.stringify(owner.metadata));
+      return;
+    }
     if (pathname !== '/mcp' && pathname !== '/healthz') {
       res.writeHead(404).end();
       return;
     }
 
-    if (!hasValidBearerToken(req.headers.authorization, accessToken)) {
-      res.writeHead(401, { 'WWW-Authenticate': 'Bearer' }).end();
+    const scopes = owner === undefined ? undefined : await owner.verify(req.headers.authorization);
+    if (
+      owner === undefined
+        ? !hasValidBearerToken(req.headers.authorization, accessToken!)
+        : scopes === undefined
+    ) {
+      rejectAndClose(req, res, 401, { 'WWW-Authenticate': owner?.challenge ?? 'Bearer' });
+      return;
+    }
+    if (owner !== undefined && !scopes?.has('discord.read')) {
+      rejectAndClose(req, res, 403, {
+        'WWW-Authenticate': 'Bearer error="insufficient_scope", scope="discord.read"',
+      });
       return;
     }
 
     // Protect the default localhost deployment from DNS rebinding. Public
     // deployments remain responsible for Host/Origin policy at their proxy.
     if (validateHost !== undefined && !validateHost(req, res)) return;
-    if (validateOrigin !== undefined && !validateOrigin(req, res)) return;
+    if (owner !== undefined) {
+      if (req.headers.origin !== undefined && req.headers.origin !== owner.origin) {
+        rejectAndClose(req, res, 403);
+        return;
+      }
+    } else if (validateOrigin !== undefined && !validateOrigin(req, res)) return;
 
     if (pathname === '/healthz') {
       if (req.method?.toUpperCase() !== 'GET') {
@@ -269,6 +323,28 @@ export async function startHttp(options: StartHttpOptions = {}): Promise<Server>
         return;
       }
 
+      if (owner !== undefined && body !== undefined) {
+        let request: { method?: string; params?: { name?: string } };
+        try {
+          request = JSON.parse(body.toString('utf8'));
+          if (request === null || typeof request !== 'object' || Array.isArray(request))
+            throw new Error('Invalid RPC');
+        } catch {
+          rejectAndClose(req, res, 400);
+          return;
+        }
+        if (
+          request.method === 'tools/call' &&
+          OWNER_WRITE_TOOL_NAMES.has(request.params?.name ?? '') &&
+          !scopes?.has('discord.write')
+        ) {
+          rejectAndClose(req, res, 403, {
+            'WWW-Authenticate':
+              'Bearer error="insufficient_scope", scope="discord.read discord.write"',
+          });
+          return;
+        }
+      }
       // The SDK adapter currently buffers the incoming stream without a byte
       // ceiling. Replay only the body we have already bounded above.
       await handleMcpRequest(
@@ -280,6 +356,9 @@ export async function startHttp(options: StartHttpOptions = {}): Promise<Server>
     }
   });
 
+  server.requestTimeout = 30_000;
+  server.headersTimeout = 10_000;
+  server.maxRequestsPerSocket = 100;
   let cleanupPromise: Promise<void> | undefined;
   const cleanup = (): Promise<void> => {
     cleanupPromise ??= (async () => {

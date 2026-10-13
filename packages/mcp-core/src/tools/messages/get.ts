@@ -52,6 +52,8 @@ export default defineTool({
     const m = (await container.rest.get(
       Routes.channelMessage(args.channel_id, args.message_id),
     )) as RawMessage;
+    if (m.id !== args.message_id || m.channel_id !== args.channel_id)
+      throw new Error('Discord message identity mismatch');
     const wrapped = wrapMessages(
       [
         {

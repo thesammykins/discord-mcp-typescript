@@ -1,8 +1,13 @@
+import { DiscordAPIError, HTTPError, RateLimitError } from '@discordjs/rest';
 import { container } from '@sapphire/pieces';
+import { TaskCancelledError } from 'cockatiel';
 import { Routes } from 'discord-api-types/v10';
 import { z } from 'zod';
+import { ThreadOutcomeUnknown } from '../../errors/client.js';
+import { classifyDiscordError } from '../../rest/errors.js';
 import { defineTool } from '../_lib/defineTool.js';
 import { THREAD_AUTO_ARCHIVE_DURATION } from '../_lib/discord-enums.js';
+import { validatePage } from '../_lib/page.js';
 import { dualResult } from '../_lib/response.js';
 import { ChannelId, MessageId } from '../_lib/snowflake.js';
 
@@ -74,10 +79,36 @@ export default defineTool({
       body.auto_archive_duration = args.auto_archive_duration;
     if (args.rate_limit_per_user !== undefined) body.rate_limit_per_user = args.rate_limit_per_user;
 
-    const t = (await container.rest.post(Routes.threads(args.channel_id, args.message_id), {
-      body,
-      reason: args.audit_reason,
-    })) as RawChannel;
+    let t: RawChannel;
+    try {
+      t = (await container.rest.post(Routes.threads(args.channel_id, args.message_id), {
+        body,
+        reason: args.audit_reason,
+      })) as RawChannel;
+    } catch (error) {
+      const classified = classifyDiscordError(error, { method: 'post' });
+      if (
+        error instanceof TaskCancelledError ||
+        classified?.replaySafe === false ||
+        (classified === null &&
+          !(error instanceof DiscordAPIError) &&
+          !(error instanceof HTTPError) &&
+          !(error instanceof RateLimitError))
+      )
+        throw new ThreadOutcomeUnknown('Thread creation outcome is unknown');
+      throw error;
+    }
+    try {
+      validatePage([t.id], 1);
+      if (
+        t.parent_id !== args.channel_id ||
+        ![10, 11].includes(t.type) ||
+        typeof t.name !== 'string'
+      )
+        throw new Error('Thread response mismatch');
+    } catch {
+      throw new ThreadOutcomeUnknown('Thread creation response is incomplete or mismatched');
+    }
 
     return dualResult({
       text: `Created thread '${t.name}' (\`${t.id}\`) under message ${args.message_id}.`,

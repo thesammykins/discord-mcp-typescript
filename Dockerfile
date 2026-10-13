@@ -37,6 +37,7 @@ LABEL org.opencontainers.image.title="Discord MCP catalog" \
       org.opencontainers.image.licenses="Apache-2.0"
 
 COPY --from=build --chown=node:node /runtime/ ./
+COPY --chown=node:node deploy/owner-entrypoint.mjs ./owner-entrypoint.mjs
 COPY --from=build --chown=node:node /workspace/LICENSE /licenses/discord-mcp/LICENSE
 
 USER node

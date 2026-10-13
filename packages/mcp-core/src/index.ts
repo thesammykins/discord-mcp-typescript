@@ -239,3 +239,5 @@ export {
  * (comparison appears unintentional) instead of a boolean.
  */
 export const VERSION: string = packageJson.version;
+
+export { OWNER_TOOL_NAMES, OWNER_WRITE_TOOL_NAMES } from './middleware/owner-scope.js';

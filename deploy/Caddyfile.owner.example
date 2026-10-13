@@ -1,0 +1,14 @@
+# Requires separately approved host/domain/TLS provisioning. Do not publish livez.
+discord.example.com {
+    @mcp path /mcp /healthz /.well-known/oauth-protected-resource /.well-known/oauth-protected-resource/mcp
+    handle @mcp {
+        request_body {
+            max_size 64KB
+        }
+        reverse_proxy 127.0.0.1:3000
+    }
+    handle {
+        respond 404
+    }
+    # No access-log directive: Authorization headers/body/content must stay private.
+}

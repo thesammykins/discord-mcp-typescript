@@ -47,6 +47,8 @@ exports[`public export surface > matches the frozen snapshot 1`] = `
   "MessageId",
   "NoopAuditSink",
   "OPAQUE_TOKEN_ACCESS",
+  "OWNER_TOOL_NAMES",
+  "OWNER_WRITE_TOOL_NAMES",
   "OtlpAuditSink",
   "PUBLIC_GUILD_ACCESS",
   "PayloadApprovalLedger",

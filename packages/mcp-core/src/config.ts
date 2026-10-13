@@ -27,6 +27,20 @@ const ConfigSchema = z.object({
       'ALLOWED_GUILDS must be a comma-separated list of 17-20 digit Discord snowflakes',
     )
     .optional(),
+  // Opt-in single-owner hosted surface; the guild allowlist stays authoritative.
+  MCP_OWNER_USER_ID: z
+    .string()
+    .regex(/^\d{17,20}$/)
+    .optional(),
+  MCP_ALLOWED_CHANNEL_IDS: z
+    .string()
+    .regex(/^\d{17,20}(?:\s*,\s*\d{17,20})*$/)
+    .optional(),
+  MCP_PUBLIC_URL: z.url().optional(),
+  MCP_OAUTH_ISSUER: z.url().optional(),
+  MCP_OAUTH_JWKS_URI: z.url().optional(),
+  MCP_OAUTH_OWNER_SUBJECT: z.string().min(1).optional(),
+
   // Required by `serve --http`, but optional for the default local stdio transport.
   DISCORD_MCP_ACCESS_TOKEN: z
     .string()
@@ -191,6 +205,23 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   ) {
     throw new Error(
       'Invalid configuration:\n  - MCP_APPROVAL_STATE_DIR and MCP_APPROVAL_HMAC_KEY must be configured together',
+    );
+  }
+  const owner = parsed.data.MCP_OWNER_USER_ID !== undefined;
+  if (owner !== (parsed.data.MCP_ALLOWED_CHANNEL_IDS !== undefined)) {
+    throw new Error(
+      'Owner profile requires MCP_OWNER_USER_ID and MCP_ALLOWED_CHANNEL_IDS together',
+    );
+  }
+  if (
+    owner &&
+    (parsed.data.ALLOWED_GUILDS === undefined ||
+      parsed.data.DISCORD_EXPECTED_BOT_ID === undefined ||
+      parsed.data.MCP_TOOL_SURFACE !== 'full' ||
+      parsed.data.MCP_CATEGORIES !== undefined)
+  ) {
+    throw new Error(
+      'Owner profile requires ALLOWED_GUILDS, DISCORD_EXPECTED_BOT_ID, full tool surface and no category override',
     );
   }
   return parsed.data;

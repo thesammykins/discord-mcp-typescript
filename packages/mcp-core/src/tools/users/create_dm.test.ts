@@ -7,12 +7,14 @@ import { describe, expect, it, vi } from 'vitest';
 import { DmOutcomeUnknown } from '../../errors/client.js';
 import usersCreateDm from './create_dm.js';
 import '../../container.js';
+import { loadConfig } from '../../config.js';
 
 const DISCORD_API = 'https://discord.com/api/v10';
 
 describe('users_create_dm', () => {
   // Routes.userChannels() is a template literal - `@me` passes through unencoded.
   it('POSTs /users/@me/channels with raw @me in URL', async () => {
+    container.config = loadConfig({ DISCORD_TOKEN: 'x'.repeat(60) });
     container.rest = new REST({ version: '10', makeRequest: fetch }).setToken('fake-token-aaaaaa');
     let capturedUrl: string | null = null;
     server.use(
@@ -51,6 +53,7 @@ describe('users_create_dm', () => {
       code: 'ECONNRESET',
     });
     const post = vi.fn().mockRejectedValue(lostResponse);
+    container.config = loadConfig({ DISCORD_TOKEN: 'x'.repeat(60) });
     container.rest = { post } as unknown as REST;
     const T = usersCreateDm;
     const t = new T(
@@ -65,6 +68,7 @@ describe('users_create_dm', () => {
 
   it('treats an internal REST timeout as outcome-unknown, not a safe retry', async () => {
     const post = vi.fn().mockRejectedValue(new TaskCancelledError('timeout'));
+    container.config = loadConfig({ DISCORD_TOKEN: 'x'.repeat(60) });
     container.rest = { post } as unknown as REST;
     const T = usersCreateDm;
     const t = new T(

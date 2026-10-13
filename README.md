@@ -1,3 +1,5 @@
+> Owner remote fork: see [OWNER_REMOTE.md](OWNER_REMOTE.md) for the scoped OAuth profile, deployment and verification boundary.
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/cappyeo/discord-mcp/main/.github/assets/discord-mcp-banner.jpg" alt="Discord MCP - connect Discord to the Model Context Protocol" width="1200" />
 </p>

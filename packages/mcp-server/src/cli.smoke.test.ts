@@ -36,7 +36,14 @@ function runCli(
   try {
     const stdout = execFileSync(process.execPath, [cliPath, ...args], {
       encoding: 'utf8',
-      env: { PATH: process.env.PATH ?? '', DISCORD_MCP_ACTIVITY: 'off', ...extraEnv },
+      env: {
+        PATH: process.env.PATH ?? '',
+        DISCORD_MCP_ACTIVITY: 'off',
+        ...(process.env.NODE_OPTIONS === undefined
+          ? {}
+          : { NODE_OPTIONS: process.env.NODE_OPTIONS }),
+        ...extraEnv,
+      },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     return { stdout, stderr: '', status: 0 };
@@ -137,7 +144,12 @@ describe('cli binary smoke (post-build)', () => {
       expect(summary.data.total).toBe(1);
       expect(summary.data.recent[0]).toMatchObject({ command: 'doctor', outcome: 'failure' });
 
-      const journal = readFileSync(join(appData, 'discord-mcp', 'activity.jsonl'), 'utf8');
+      const journal = readFileSync(
+        process.platform === 'darwin'
+          ? join(appData, 'Library', 'Application Support', 'discord-mcp', 'activity.jsonl')
+          : join(appData, 'discord-mcp', 'activity.jsonl'),
+        'utf8',
+      );
       expect(journal).not.toContain('DISCORD_TOKEN');
       expect(journal).not.toContain('Bot ');
     } finally {

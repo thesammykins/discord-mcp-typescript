@@ -320,3 +320,17 @@ export class CancelledError extends DiscordClientError {
     super(message);
   }
 }
+
+export class MessageOutcomeUnknown extends DiscordClientError {
+  public readonly code = 'MESSAGE_OUTCOME_UNKNOWN';
+  public readonly retriable = false;
+  public override recoveryHint =
+    'Inspect the approved channel history and reconcile the attempted send before retrying; it may already have succeeded.';
+}
+
+export class ThreadOutcomeUnknown extends DiscordClientError {
+  public readonly code = 'THREAD_OUTCOME_UNKNOWN';
+  public readonly retriable = false;
+  public override recoveryHint =
+    'Reconcile the anchor message and its thread before retrying; creation may already have succeeded.';
+}

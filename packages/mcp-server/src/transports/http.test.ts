@@ -11,6 +11,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readActivity, resolveActivityPath } from '../lib/activity.js';
 import { hasValidBearerToken, startHttp } from './http.js';
 
+vi.mock('node:os', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('node:os')>()),
+  homedir: () => activityRoot,
+}));
+
 const VALID_TOKEN = `Bot ${'a'.repeat(60)}`;
 const ACCESS_TOKEN = 'test-access-token-with-at-least-32-characters';
 const savedEnv = { ...process.env };

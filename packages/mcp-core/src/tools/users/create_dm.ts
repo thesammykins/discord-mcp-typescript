@@ -1,3 +1,4 @@
+import { DiscordAPIError, HTTPError, RateLimitError } from '@discordjs/rest';
 import { container } from '@sapphire/pieces';
 import { TaskCancelledError } from 'cockatiel';
 import { Routes } from 'discord-api-types/v10';
@@ -6,6 +7,7 @@ import { USER_SCOPED_ACCESS } from '../../access/requirements.js';
 import { DmOutcomeUnknown } from '../../errors/client.js';
 import { classifyDiscordError } from '../../rest/errors.js';
 import { defineTool } from '../_lib/defineTool.js';
+import { validatePage } from '../_lib/page.js';
 import { dualResult } from '../_lib/response.js';
 import { ChannelId, UserId } from '../_lib/snowflake.js';
 
@@ -70,10 +72,29 @@ export default defineTool({
         throw new DmOutcomeUnknown(args.recipient_id);
       }
       const classified = classifyDiscordError(error, { method: 'post' });
-      if (classified !== null && !classified.replaySafe) {
+      if (
+        (classified !== null && !classified.replaySafe) ||
+        (classified === null &&
+          !(error instanceof DiscordAPIError) &&
+          !(error instanceof HTTPError) &&
+          !(error instanceof RateLimitError))
+      ) {
         throw new DmOutcomeUnknown(args.recipient_id);
       }
       throw error;
+    }
+    try {
+      validatePage([ch.id], 1);
+      if (
+        container.config.MCP_OWNER_USER_ID !== undefined &&
+        (args.recipient_id !== container.config.MCP_OWNER_USER_ID ||
+          ch.type !== 1 ||
+          ch.recipients?.length !== 1 ||
+          ch.recipients[0]?.id !== args.recipient_id)
+      )
+        throw new Error('DM identity mismatch');
+    } catch {
+      throw new DmOutcomeUnknown(args.recipient_id);
     }
     const recipient_ids = (ch.recipients ?? []).map((r) => r.id);
     return dualResult({

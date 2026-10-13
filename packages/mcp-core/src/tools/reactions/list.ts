@@ -3,6 +3,7 @@ import { Routes } from 'discord-api-types/v10';
 import { z } from 'zod';
 import { defineTool } from '../_lib/defineTool.js';
 import { REACTION_TYPE } from '../_lib/discord-enums.js';
+import { compareIds, validatePage } from '../_lib/page.js';
 import { dualResult } from '../_lib/response.js';
 import { ChannelId, MessageId, UserId } from '../_lib/snowflake.js';
 
@@ -55,6 +56,9 @@ export default defineTool({
       }),
     ),
     count: z.number().int(),
+    type: z.union([z.literal(0), z.literal(1)]),
+    next_after: UserId.optional(),
+    may_have_more: z.boolean(),
     channel_id: ChannelId,
     message_id: MessageId,
     emoji: z.string(),
@@ -66,28 +70,51 @@ export default defineTool({
     openWorldHint: true,
   },
   idempotent: true,
-  handler: async (args) => {
-    const query = new URLSearchParams({ limit: String(args.limit) });
-    if (args.type !== undefined) query.set('type', String(args.type));
-    if (args.after !== undefined) query.set('after', args.after);
-    const raw = (await container.rest.get(
-      Routes.channelMessageReaction(args.channel_id, args.message_id, args.emoji),
-      { query },
-    )) as RawUser[];
-    const users = raw.map((u) => ({
-      user_id: u.id,
-      username: u.global_name ?? u.username,
-      bot: u.bot ?? false,
-    }));
-    return dualResult({
-      text: `**${users.length} user(s)** reacted with ${args.emoji} on message ${args.message_id}.`,
-      data: {
-        users,
-        count: users.length,
-        channel_id: args.channel_id,
-        message_id: args.message_id,
-        emoji: args.emoji,
-      },
-    });
-  },
+  handler: (args, ctx) => readReactionPage(args, ctx.signal),
 });
+
+export async function readReactionPage(
+  args: {
+    channel_id: string;
+    message_id: string;
+    emoji: string;
+    type?: 0 | 1 | undefined;
+    after?: string | undefined;
+    limit: number;
+  },
+  signal?: AbortSignal,
+) {
+  const query = new URLSearchParams({ limit: String(args.limit) });
+  if (args.type !== undefined) query.set('type', String(args.type));
+  if (args.after !== undefined) query.set('after', args.after);
+  const raw = (await container.rest.get(
+    Routes.channelMessageReaction(args.channel_id, args.message_id, args.emoji),
+    { query, ...(signal === undefined ? {} : { signal }) },
+  )) as RawUser[];
+  if (!Array.isArray(raw)) throw new Error('Invalid Discord reactor page');
+  validatePage(
+    raw.map((u) => u.id),
+    args.limit,
+    undefined,
+    args.after,
+  );
+  raw.sort((a, b) => compareIds(a.id, b.id));
+  const users = raw.map((u) => ({
+    user_id: u.id,
+    username: u.global_name ?? u.username,
+    bot: u.bot ?? false,
+  }));
+  return dualResult({
+    text: `**${users.length} user(s)** reacted with ${args.emoji} on message ${args.message_id}.`,
+    data: {
+      users,
+      count: users.length,
+      channel_id: args.channel_id,
+      message_id: args.message_id,
+      emoji: args.emoji,
+      type: args.type ?? 0,
+      may_have_more: users.length === args.limit,
+      ...(users.length === args.limit ? { next_after: users[users.length - 1]!.user_id } : {}),
+    },
+  });
+}

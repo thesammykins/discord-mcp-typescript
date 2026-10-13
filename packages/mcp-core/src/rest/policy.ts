@@ -185,7 +185,10 @@ export function buildPolicy(config: Config, logger?: Logger): IPolicy {
               ? new Error('isolated')
               : undefined;
         logger?.warn(
-          { event: 'circuit_breaker_open', err: err?.message },
+          {
+            event: 'circuit_breaker_open',
+            ...(config.MCP_OWNER_USER_ID === undefined ? { err: err?.message } : {}),
+          },
           'circuit breaker opened',
         );
         circuitTransitions.add(1, { [ATTR_CIRCUIT_TO_STATE]: 'open' });
@@ -266,7 +269,7 @@ export function buildPolicy(config: Config, logger?: Logger): IPolicy {
             {
               event: 'dead_letter',
               tag: 'dead-letter',
-              err: errMessage,
+              ...(config.MCP_OWNER_USER_ID === undefined ? { err: errMessage } : {}),
               error_type: errorType,
             },
             'request reached dead-letter (retries exhausted or unrecoverable)',

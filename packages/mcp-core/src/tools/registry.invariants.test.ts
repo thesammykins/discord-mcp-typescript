@@ -79,9 +79,9 @@ beforeAll(async () => {
 
 describe('tool registry invariants', () => {
   it('discovers the full advertised tool surface', () => {
-    expect(tools.length).toBe(221);
+    expect(tools.length).toBe(224);
     expect(new Set(tools.map((t) => t.name)).size).toBe(tools.length);
-    expect(new Set(tools.map((t) => t.category)).size).toBe(31);
+    expect(new Set(tools.map((t) => t.category)).size).toBe(32);
   });
 
   it('every destructive tool is gated by confirm_required, and vice versa', () => {

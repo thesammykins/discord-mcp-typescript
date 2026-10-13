@@ -1,0 +1,45 @@
+services:
+  discord-mcp:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    entrypoint: [node, /app/owner-entrypoint.mjs]
+    command: [serve, --http, --host, 0.0.0.0, --port, '3000']
+    env_file: ../.env.owner
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: warn
+      MCP_AUDIT_SINK: none
+      OTEL_ENABLED: 'false'
+      DISCORD_MCP_ACTIVITY: 'off'
+      MCP_HTTP_MAX_BODY_BYTES: '65536'
+      MCP_HTTP_MAX_IN_FLIGHT: '8'
+    secrets:
+      - discord_bot_token
+    ports:
+      - '127.0.0.1:3000:3000'
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 512m
+    cpus: 1.0
+    restart: unless-stopped
+    stop_grace_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '3'
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/livez').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+secrets:
+  discord_bot_token:
+    file: ${DISCORD_BOT_TOKEN_FILE:?Choose an approved existing bot-secret file}
