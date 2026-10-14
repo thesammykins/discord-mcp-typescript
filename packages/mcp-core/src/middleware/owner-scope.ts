@@ -54,8 +54,11 @@ interface Channel {
 export class OwnerScopePolicy {
   readonly parents: ReadonlySet<string>;
   constructor(
-    private readonly config: Config,
-    private readonly rest: REST,
+    private readonly config: Pick<
+      Config,
+      'MCP_ALLOWED_CHANNEL_IDS' | 'MCP_OWNER_USER_ID' | 'ALLOWED_GUILDS'
+    >,
+    private readonly rest: Pick<REST, 'get'>,
   ) {
     this.parents = new Set(config.MCP_ALLOWED_CHANNEL_IDS?.split(',').map((id) => id.trim()));
   }

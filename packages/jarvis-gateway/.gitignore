@@ -1,0 +1,6 @@
+dist/
+site.tar.gz
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+.openai/local-state.json

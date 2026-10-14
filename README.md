@@ -1,4 +1,4 @@
-> Owner remote fork: see [OWNER_REMOTE.md](OWNER_REMOTE.md) for the scoped OAuth profile, deployment and verification boundary.
+> Owner remote fork: see [OWNER_REMOTE.md](OWNER_REMOTE.md) for the scoped OAuth profile, deployment and verification boundary. The separate [Jarvis Gateway Worker](packages/jarvis-gateway/README.md) supports an owner-private Sites deployment and an installable connector-extension skill.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/cappyeo/discord-mcp/main/.github/assets/discord-mcp-banner.jpg" alt="Discord MCP - connect Discord to the Model Context Protocol" width="1200" />

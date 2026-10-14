@@ -1,0 +1,25 @@
+{
+  "name": "@discord-mcp/jarvis-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "validate": "node scripts/validate-artifact.mjs",
+    "test": "vitest run --maxWorkers=2",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "4.6.5",
+    "discord-api-types": "0.38.55"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "esbuild": "0.28.2",
+    "miniflare": "4.20260730.0",
+    "typescript": "^5.6.0",
+    "vitest": "4.1.11",
+    "@modelcontextprotocol/client": "2.2.0"
+  }
+}

@@ -1,0 +1,11 @@
+# Synthetic template only. Never store a real bot token here.
+JARVIS_SITE_ORIGIN=https://gateway.example
+JARVIS_OWNER_PRINCIPAL=replace-with-this-sites-authenticated-owner
+JARVIS_DISCORD_ENABLED=false
+JARVIS_DISCORD_SCOPES=discord.read
+DISCORD_EXPECTED_BOT_ID=555566667777888899
+ALLOWED_GUILDS=111122223333444455
+MCP_OWNER_USER_ID=444455556666777788
+MCP_ALLOWED_CHANNEL_IDS=222233334444555566
+JARVIS_LOG_ERRORS=false
+# DISCORD_TOKEN must be supplied by approved native server-only secret input.

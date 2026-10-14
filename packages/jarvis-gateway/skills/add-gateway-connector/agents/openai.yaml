@@ -1,0 +1,4 @@
+interface:
+  display_name: "Add Gateway Connector"
+  short_description: "Extend Jarvis Gateway with scoped Worker connectors"
+  default_prompt: "Use $add-gateway-connector to assess and add a supported connector to Jarvis Gateway."
