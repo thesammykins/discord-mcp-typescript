@@ -57,6 +57,38 @@ const args: Record<string, Record<string, unknown>> = {
   threads_set_archived: { channel_id: thread, archived: true, __approve: true },
 };
 describe('native Site MCP contract', () => {
+  it('rejects every invocation without an exact native owner even with read/write scope granted', async () => {
+    const fetcher = vi.fn();
+    const bindings = { ...env, JARVIS_DISCORD_SCOPES: 'discord.read,discord.write' };
+    for (const name of OWNER_TOOL_NAMES) {
+      for (const principal of [null, 'synthetic-forged-owner']) {
+        const result = await call(`discord_${name}`, args[name], bindings, fetcher, principal);
+        expect(result).toMatchObject({
+          isError: true,
+          structuredContent: { code: 'OWNER_IDENTITY_REJECTED' },
+        });
+        expect(JSON.stringify(result)).not.toContain(bindings.DISCORD_TOKEN);
+      }
+    }
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+  it('has no secret-returning HTTP routes with a configured synthetic server credential', async () => {
+    const fetcher = vi.fn();
+    for (const path of ['/', '/control', '/healthz', '/env', '/secrets']) {
+      const response = await gateway(new Request(`https://gateway.example${path}`), env, fetcher);
+      expect(await response.text()).not.toContain(env.DISCORD_TOKEN);
+      if (['/env', '/secrets'].includes(path)) expect(response.status).toBe(404);
+    }
+    const response = await gateway(
+      new Request('https://gateway.example/control', {
+        headers: { 'oai-authenticated-user-id': 'synthetic-forged-owner' },
+      }),
+      env,
+      fetcher,
+    );
+    expect(response.status).toBe(403);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
   it('discovers exactly the namespaced bounded manifest without an upstream credential or call', async () => {
     const fetcher = vi.fn();
     for (const method of ['server/discover', 'initialize', 'tools/list']) {
